@@ -10,7 +10,7 @@ type WishlistRow = {
 };
 
 const FALLBACK_API_BASE_URL =
-  "https://oops-plymouth-distribute-apr.trycloudflare.com";
+  "https://prenatal-endearing-provider.ngrok-free.dev";
 
 const getApiBaseUrl = () => {
   if (typeof window !== "undefined") {
