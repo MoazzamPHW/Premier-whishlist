@@ -10,7 +10,7 @@ type WishlistRow = {
 };
 
 const FALLBACK_API_BASE_URL =
-  "https://prenatal-endearing-provider.ngrok-free.dev";
+  "https://carrying-remained-clay-vegetable.trycloudflare.com";
 
 const getApiBaseUrl = () => {
   if (typeof window !== "undefined") {

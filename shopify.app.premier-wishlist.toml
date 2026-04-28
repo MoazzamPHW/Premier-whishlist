@@ -2,7 +2,7 @@
 
 client_id = "3d586d816dba6aae7788ccaf133feaff"
 name = "Premier-WishList"
-application_url = "https://prenatal-endearing-provider.ngrok-free.dev"
+application_url = "https://carrying-remained-clay-vegetable.trycloudflare.com"
 embedded = true
 
 [webhooks]
@@ -14,5 +14,5 @@ scopes = "write_products"
 
 [auth]
 redirect_urls = [
-  "https://prenatal-endearing-provider.ngrok-free.dev/api/auth"
+  "https://carrying-remained-clay-vegetable.trycloudflare.com/api/auth"
 ]
