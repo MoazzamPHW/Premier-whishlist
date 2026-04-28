@@ -44,6 +44,8 @@ export default function ReportingToolbar({
           <option value="inventory_asc">Inventory (Low-High)</option>
           <option value="count_desc">Wishlist count (High-Low)</option>
           <option value="count_asc">Wishlist count (Low-High)</option>
+          <option value="purchased_desc">Purchased count (High-Low)</option>
+          <option value="purchased_asc">Purchased count (Low-High)</option>
         </select>
         <s-button  variant="secondary" href={exportHref}>
           Export CSV

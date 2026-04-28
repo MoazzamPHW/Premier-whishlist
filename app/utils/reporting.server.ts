@@ -41,17 +41,28 @@ export async function getReportingRows({
 
   const productMap = new Map<
     string,
-    { users: Set<string>; count: number }
+    { users: Set<string>; count: number; purchasedUsers: Set<string>; purchasedCount: number }
   >();
 
   items.forEach((item) => {
     const entry =
-      productMap.get(item.productId) || { users: new Set(), count: 0 };
+      productMap.get(item.productId) || {
+        users: new Set(),
+        count: 0,
+        purchasedUsers: new Set(),
+        purchasedCount: 0,
+      };
     const email = item.wishlist.customer?.email;
-    if (email) {
+    if (email && !item.purchasedAt) {
       entry.users.add(email);
     }
-    entry.count += 1;
+    if (!item.purchasedAt) {
+      entry.count += 1;
+    }
+    if (item.purchasedAt) {
+      entry.purchasedCount += 1;
+      if (email) entry.purchasedUsers.add(email);
+    }
     productMap.set(item.productId, entry);
   });
 
@@ -116,6 +127,9 @@ export async function getReportingRows({
         imageUrl: node.featuredImage?.url || null,
         users: Array.from(stats.users),
         count: stats.count,
+        purchasedUsers: Array.from(stats.purchasedUsers),
+        purchasedCount: stats.purchasedCount,
+        bought: stats.purchasedCount > 0,
       });
     });
   }
@@ -142,6 +156,10 @@ export async function getReportingRows({
         return b.count - a.count;
       case "count_asc":
         return a.count - b.count;
+      case "purchased_desc":
+        return b.purchasedCount - a.purchasedCount;
+      case "purchased_asc":
+        return a.purchasedCount - b.purchasedCount;
       default:
         return a.title.localeCompare(b.title);
     }

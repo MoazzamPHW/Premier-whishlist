@@ -14,6 +14,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     const body = (await request.json()) as RemoveFromWishlistRequest;
     const { wishlistItemId } = body;
+    console.log("[PW][api.wishlist.remove] incoming", {
+      wishlistItemId: wishlistItemId || null,
+    });
     if (!wishlistItemId) {
       return corsResponse(
         { success: false, error: "Missing wishlistItemId" },
@@ -23,8 +26,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     await prisma.wishlistItem.delete({ where: { id: wishlistItemId } });
+    console.log("[PW][api.wishlist.remove] deleted", { wishlistItemId });
     return corsResponse({ success: true }, request);
   } catch (error: unknown) {
+    console.error("[PW][api.wishlist.remove] failed", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     return corsResponse(
       { success: false, error: errorMessage },

@@ -24,6 +24,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       email,
       shopDomain,
     } = body;
+    console.log("[PW][api.wishlist.add] incoming", {
+      hasCustomerId: !!shopifyCustomerId,
+      hasEmail: !!email,
+      productId: productId ? String(productId) : null,
+      variantId: variantId ? String(variantId) : null,
+      shopDomain: shopDomain || null,
+    });
     if (!productId) {
       return corsResponse(
         { success: false, error: "Missing productId" },
@@ -67,7 +74,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           customerId: customer.id,
           isDefault: true,
         },
-        include: { items: true },
+        include: {
+          items: {
+            where: { purchasedAt: null },
+          },
+        },
       });
 
       if (!wishlist) {
@@ -79,9 +90,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             shopId: shop.id,
             shareToken: crypto.randomUUID(),
           },
-          include: { items: true },
+          include: {
+            items: {
+              where: { purchasedAt: null },
+            },
+          },
         });
       }
+    }
+
+    if (!wishlist) {
+      return corsResponse(
+        { success: false, error: "Failed to resolve wishlist" },
+        request,
+        { status: 500 },
+      );
     }
 
     // Prevent duplicates per wishlist
@@ -90,13 +113,42 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         wishlistId: wishlist.id,
         productId: normalizedProductId,
         variantId: normalizedVariantId,
+        purchasedAt: null,
       },
     });
     if (existing) {
+      console.log("[PW][api.wishlist.add] duplicate-hit", { wishlistItemId: existing.id });
       return corsResponse({
         success: true,
         wishlistItemId: existing.id,
         example: { id: existing.id },
+      }, request);
+    }
+
+    const purchasedExisting = await prisma.wishlistItem.findFirst({
+      where: {
+        wishlistId: wishlist.id,
+        productId: normalizedProductId,
+        variantId: normalizedVariantId,
+        purchasedAt: { not: null },
+      },
+    });
+    if (purchasedExisting) {
+      const reactivated = await prisma.wishlistItem.update({
+        where: { id: purchasedExisting.id },
+        data: {
+          purchasedAt: null,
+          purchasedOrderId: null,
+          addedAt: new Date(),
+        },
+      });
+      console.log("[PW][api.wishlist.add] reactivated-purchased", {
+        wishlistItemId: reactivated.id,
+      });
+      return corsResponse({
+        success: true,
+        wishlistItemId: reactivated.id,
+        example: { id: reactivated.id },
       }, request);
     }
 
@@ -107,6 +159,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         variantId: normalizedVariantId,
       },
     });
+    console.log("[PW][api.wishlist.add] created", { wishlistItemId: newItem.id });
 
     // Example data for dev/front
     const example: WishlistItem = {
@@ -122,6 +175,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       example,
     }, request);
   } catch (error: unknown) {
+    console.error("[PW][api.wishlist.add] failed", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     return corsResponse(
       { success: false, error: errorMessage },

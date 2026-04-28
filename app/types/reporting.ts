@@ -6,6 +6,9 @@ export type ReportingRow = {
   imageUrl: string | null;
   users: string[];
   count: number;
+  purchasedUsers: string[];
+  purchasedCount: number;
+  bought: boolean;
 };
 
 export type LoaderData = {

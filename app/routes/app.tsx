@@ -4,9 +4,22 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+
+  // Keep shop token in sync so storefront detail API can resolve products.
+  await prisma.shop.upsert({
+    where: { shopDomain: session.shop },
+    create: {
+      shopDomain: session.shop,
+      accessToken: session.accessToken || "",
+    },
+    update: {
+      accessToken: session.accessToken || undefined,
+    },
+  });
 
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };

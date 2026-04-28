@@ -25,9 +25,13 @@
 }
 
 .wishlist-card-button.is-active {
-  color: {{ block.settings.active_icon_color }};
-  background: {{ block.settings.active_background_color }};
-  border-color: {{ block.settings.active_background_color }};
+  color: {{ block.settings.active_icon_color }} !important;
+  background: {{ block.settings.active_background_color }} !important;
+  border-color: {{ block.settings.active_background_color }} !important;
+}
+
+.wishlist-card-button.is-active svg {
+  fill: {{ block.settings.active_icon_color }} !important;
 }
 
 .wishlist-card-button:disabled {
@@ -38,6 +42,13 @@
 
 <script>
 (function () {
+  const debugEnabled =
+    window.localStorage.getItem("premierWishlistDebug") === "1" ||
+    window.PremierWishlistDebug === true;
+  const log = (...args) => {
+    if (!debugEnabled) return;
+    console.log("[PW:CardBlock]", ...args);
+  };
   const customerId = {{ customer.id | json }};
   const customerEmail = {{ customer.email | strip | json }};
   const loginUrl =
@@ -86,13 +97,29 @@
     return value ? String(value) : null;
   };
 
+  const extractProductHandle = (card) => {
+    const link = card.querySelector("a[href*='/products/']");
+    if (!link) return null;
+    const href = link.getAttribute("href") || "";
+    const match = href.match(/\/products\/([^/?#]+)/);
+    return match ? match[1] : null;
+  };
+
   const attachButton = (card) => {
     if (!card || card.querySelector("[data-wishlist-button]")) return;
 
     const productId = extractProductId(card);
-    if (!productId) return;
+    if (!productId) {
+      log("skip:no-product-id");
+      return;
+    }
     const variantId = extractVariantId(card);
-    if (!variantId) return;
+    const productHandle = extractProductHandle(card);
+    if (!variantId) {
+      log("variant:lazy-lookup", {
+        productId,
+      });
+    }
 
     // Create wrapper and button
     const wrapper = document.createElement("div");
@@ -109,6 +136,7 @@
       customerEmail,
       productId,
       variantId,
+      productHandle,
       loginUrl,
       shop: shopDomain,
     });
@@ -118,6 +146,7 @@
       '<path d="M1.24264 8.24264L8 15L14.7574 8.24264C15.553 7.44699 16 6.36786 16 5.24264V5.05234C16 2.8143 14.1857 1 11.9477 1C10.7166 1 9.55233 1.55959 8.78331 2.52086L8 3.5L7.21669 2.52086C6.44767 1.55959 5.28338 1 4.05234 1C1.8143 1 0 2.8143 0 5.05234V5.24264C0 6.36786 0.44699 7.44699 1.24264 8.24264Z"/></svg>';
 
     wrapper.appendChild(button);
+    log("attach", { productId, hasVariantId: !!variantId, productHandle });
 
     // Attach to card media for visibility
     // const media = card.querySelector(".card__media");
@@ -144,7 +173,9 @@
       ".product-card",
       "[data-product-id]",
     ];
-    document.querySelectorAll(selectors.join(",")).forEach((card) => attachButton(card));
+    const cards = document.querySelectorAll(selectors.join(","));
+    log("scan", { totalCandidates: cards.length });
+    cards.forEach((card) => attachButton(card));
   };
 
   // Attach on initial load

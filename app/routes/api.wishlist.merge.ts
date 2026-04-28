@@ -33,7 +33,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Find or create default wishlist for user
     let wishlist = await prisma.wishlist.findFirst({
       where: { customerId: customer.id, isDefault: true },
-      include: { items: true },
+      include: {
+        items: {
+          where: { purchasedAt: null },
+        },
+      },
     });
     if (!wishlist) {
       wishlist = await prisma.wishlist.create({
@@ -44,7 +48,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           shopId: shop.id,
           shareToken: crypto.randomUUID(),
         },
-        include: { items: true },
+        include: {
+          items: {
+            where: { purchasedAt: null },
+          },
+        },
       });
     }
 
@@ -70,20 +78,43 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           (item.variantId || null) === normalizedVariantId,
       );
       if (!isDuplicate) {
-        await prisma.wishlistItem.create({
-          data: {
+        const purchasedExisting = await prisma.wishlistItem.findFirst({
+          where: {
             wishlistId: wishlist.id,
             productId: normalizedProductId,
             variantId: normalizedVariantId,
+            purchasedAt: { not: null },
           },
         });
+        if (purchasedExisting) {
+          await prisma.wishlistItem.update({
+            where: { id: purchasedExisting.id },
+            data: {
+              purchasedAt: null,
+              purchasedOrderId: null,
+              addedAt: new Date(),
+            },
+          });
+        } else {
+          await prisma.wishlistItem.create({
+            data: {
+              wishlistId: wishlist.id,
+              productId: normalizedProductId,
+              variantId: normalizedVariantId,
+            },
+          });
+        }
       }
     }
 
     // Refetch updated list
     const updated = await prisma.wishlist.findUnique({
       where: { id: wishlist.id },
-      include: { items: true },
+      include: {
+        items: {
+          where: { purchasedAt: null },
+        },
+      },
     });
     const items: WishlistItem[] = (updated?.items ?? []).map(
       (item: {

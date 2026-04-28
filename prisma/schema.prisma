@@ -86,16 +86,19 @@ model Wishlist {
 }
 
 model WishlistItem {
-  id         String   @id @default(uuid())
-  wishlistId String
-  productId  String
-  variantId  String?
-  addedAt    DateTime @default(now())
+  id               String   @id @default(uuid())
+  wishlistId       String
+  productId        String
+  variantId        String?
+  addedAt          DateTime @default(now())
+  purchasedAt      DateTime?
+  purchasedOrderId String?
 
-  wishlist   Wishlist  @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  wishlist         Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
 
   @@index([wishlistId])
   @@index([productId])
   @@index([variantId])
+  @@index([purchasedAt])
   @@unique([wishlistId, productId, variantId])
 }

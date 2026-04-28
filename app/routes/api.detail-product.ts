@@ -1,6 +1,34 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { sessionStorage } from "../shopify.server";
 import { corsResponse, handleCorsPreflight } from "../utils/cors.server";
+import prisma from "../db.server";
+
+function inferShopFromRequest(request: Request): string | null {
+  const direct = request.headers.get("x-shopify-shop-domain");
+  if (direct) return direct;
+
+  const origin = request.headers.get("Origin");
+  if (origin) {
+    try {
+      const host = new URL(origin).host;
+      if (host.endsWith(".myshopify.com")) return host;
+    } catch {
+      // ignore
+    }
+  }
+
+  const referer = request.headers.get("Referer");
+  if (referer) {
+    try {
+      const host = new URL(referer).host;
+      if (host.endsWith(".myshopify.com")) return host;
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
+}
 
 // Detail endpoint to fetch a product via Admin GraphQL API.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -9,7 +37,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const url = new URL(request.url);
   const productId = url.searchParams.get("productId");
-  const shop = url.searchParams.get("shop");
+  const shop = url.searchParams.get("shop") || inferShopFromRequest(request);
+  console.log("[PW][api.detail-product] incoming", {
+    productId: productId || null,
+    shop: shop || null,
+  });
   if (!productId) {
     return corsResponse({ error: "Missing productId" }, request, { status: 400 });
   }
@@ -23,9 +55,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const fallbackSession =
     sessions.find((entry) => entry.id?.startsWith("offline_")) ||
     sessions[0];
+  const shopRow = await prisma.shop.findUnique({ where: { shopDomain: shop } });
   const accessToken =
     offlineSession?.accessToken || fallbackSession?.accessToken;
-  if (!accessToken) {
+  const resolvedAccessToken = accessToken || shopRow?.accessToken;
+  if (!resolvedAccessToken) {
     return corsResponse(
       { error: "Missing access token for shop" },
       request,
@@ -39,7 +73,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     {
       method: "POST",
       headers: {
-        "X-Shopify-Access-Token": accessToken,
+        "X-Shopify-Access-Token": resolvedAccessToken,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -70,7 +104,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   );
 
   const data = await response.json();
-  console.log("detail-product", { productId, status: response.status, data });
+  console.log("[PW][api.detail-product] response", {
+    productId,
+    shop,
+    status: response.status,
+    hasProduct: !!data?.data?.product,
+  });
 
   return corsResponse({ status: response.status, data }, request, {
     status: 200,

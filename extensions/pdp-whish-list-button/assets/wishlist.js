@@ -1,6 +1,20 @@
 (() => {
   if (window.PremierWishlistLogicLoaded) return;
   window.PremierWishlistLogicLoaded = true;
+  const debugEnabled =
+    typeof window !== "undefined" &&
+    (window.localStorage.getItem("premierWishlistDebug") === "1" ||
+      window.PremierWishlistDebug === true);
+  const log = (...args) => {
+    if (!debugEnabled) return;
+    console.log("[PW]", ...args);
+  };
+  const logError = (...args) => {
+    if (!debugEnabled) return;
+    console.error("[PW]", ...args);
+  };
+  const reason = (code, data = {}) => ({ code, ...data });
+  log("init");
 
   const fallbackApiBaseUrl =
     window.PremierWishlistApiBaseUrl ||
@@ -8,6 +22,11 @@
 
   const normalizeId = (value) =>
     value === null || value === undefined ? "" : String(value);
+  const getCustomerCacheKey = (customerId, customerEmail) => {
+    const normalizedCustomerId = normalizeId(customerId);
+    const normalizedEmail = normalizeId(customerEmail).toLowerCase();
+    return normalizedCustomerId || (normalizedEmail ? `email:${normalizedEmail}` : "");
+  };
 
   const cache =
     window.PremierWishlistCache ||
@@ -15,6 +34,9 @@
   const productCache =
     window.PremierWishlistProductCache ||
     (window.PremierWishlistProductCache = {});
+  const buttonRegistry =
+    window.PremierWishlistButtonRegistry ||
+    (window.PremierWishlistButtonRegistry = []);
 
   const ensureLoginModalStyles = () => {
     if (document.querySelector("[data-premier-wishlist-modal-style]")) return;
@@ -65,12 +87,17 @@
   ) => {
     const normalizedCustomerId = normalizeId(customerId);
     const normalizedEmail = normalizeId(customerEmail).toLowerCase();
-    const key = normalizedCustomerId || (normalizedEmail ? `email:${normalizedEmail}` : "");
-    if (!key) return Promise.resolve([]);
+    const key = getCustomerCacheKey(normalizedCustomerId, normalizedEmail);
+    if (!key) {
+      log("api:wishlist skipped", reason("MISSING_CUSTOMER_KEY"));
+      return Promise.resolve([]);
+    }
     if (cache.wishlistByCustomer[key]?.data) {
+      log("api:wishlist cache-hit", { key });
       return Promise.resolve(cache.wishlistByCustomer[key].data);
     }
     if (cache.wishlistByCustomer[key]?.promise) {
+      log("api:wishlist request-dedup", { key });
       return cache.wishlistByCustomer[key].promise;
     }
     const params = new URLSearchParams();
@@ -80,15 +107,22 @@
       params.set("email", normalizedEmail);
     }
     if (shopDomain) params.set("shop", shopDomain);
-    const promise = fetch(`${apiBaseUrl}/api/wishlist?${params.toString()}`)
+    const url = `${apiBaseUrl}/api/wishlist?${params.toString()}`;
+    const promise = fetch(url)
       .then((res) => res.json())
       .then((data) => {
+        log("api:wishlist", {
+          key,
+          count: Array.isArray(data?.wishlist) ? data.wishlist.length : 0,
+          ok: true,
+        });
         cache.wishlistByCustomer[key] = {
           data: data.wishlist || [],
         };
         return cache.wishlistByCustomer[key].data;
       })
-      .catch(() => {
+      .catch((err) => {
+        logError("api:wishlist failed", err);
         cache.wishlistByCustomer[key] = { data: [] };
         return [];
       });
@@ -96,8 +130,14 @@
     return promise;
   };
 
-  const updateCacheAdd = (customerId, item) => {
-    const key = normalizeId(customerId);
+  const invalidateCustomerWishlistCache = (customerId, customerEmail) => {
+    const key = getCustomerCacheKey(customerId, customerEmail);
+    if (!key) return;
+    delete cache.wishlistByCustomer[key];
+  };
+
+  const updateCacheAdd = (customerId, customerEmail, item) => {
+    const key = getCustomerCacheKey(customerId, customerEmail);
     if (!key) return;
     const current = cache.wishlistByCustomer[key]?.data || [];
     if (!current.find((entry) => entry.id === item.id)) {
@@ -105,8 +145,8 @@
     }
   };
 
-  const updateCacheRemove = (customerId, itemId) => {
-    const key = normalizeId(customerId);
+  const updateCacheRemove = (customerId, customerEmail, itemId) => {
+    const key = getCustomerCacheKey(customerId, customerEmail);
     if (!key) return;
     const current = cache.wishlistByCustomer[key]?.data || [];
     cache.wishlistByCustomer[key] = {
@@ -133,12 +173,19 @@
       customerEmail: normalizeId(config.customerEmail),
       productId: normalizeId(config.productId),
       variantId: normalizeId(config.variantId),
+      productHandle: normalizeId(config.productHandle),
       apiBaseUrl: normalizeId(config.apiBaseUrl) || fallbackApiBaseUrl,
       shopDomain: normalizeId(config.shop),
+      customerKey: getCustomerCacheKey(config.customerId, config.customerEmail),
       loginUrl:
         normalizeId(config.loginUrl) ||
         "https://shopify.com/77283033320/account?locale=en&region_country=US",
     };
+    log("card:init", {
+      productId: state.productId,
+      variantId: state.variantId,
+      customer: !!state.customerId || !!state.customerEmail,
+    });
 
     const needsInitialApiSync = !!state.customerId;
 
@@ -157,7 +204,10 @@
       setLoading(true);
       try {
         if (!state.variantId) {
-          return;
+          log("card:sync skipped missing variantId", {
+            productId: state.productId,
+            reason: reason("MISSING_VARIANT_ID_FOR_EXACT_MATCH"),
+          });
         }
         const items = await getWishlistForCustomer(
           state.customerId,
@@ -165,24 +215,80 @@
           state.shopDomain,
           state.customerEmail,
         );
-        const found = (items || []).find(
+        const foundExact = (items || []).find(
           (item) =>
             normalizeId(item.productId) === state.productId &&
             normalizeId(item.variantId) === state.variantId,
         );
+        const foundByProduct = (items || []).find(
+          (item) => normalizeId(item.productId) === state.productId,
+        );
+        const found = foundExact || foundByProduct;
         if (found) {
           setActive(true);
           state.wishlistItemId = found.id;
+          if (!state.variantId && found.variantId) {
+            state.variantId = normalizeId(found.variantId);
+          }
+          log("card:sync matched", {
+            productId: state.productId,
+            wishlistItemId: found.id,
+          });
+        } else {
+          log("card:sync not-found", {
+            productId: state.productId,
+            reason: reason("NO_WISHLIST_MATCH"),
+          });
         }
-      } catch {
-        // no-op
+      } catch (err) {
+        logError("card:sync failed", err);
       } finally {
         setLoading(false);
       }
     };
 
+    const syncFromServer = async (forceFresh = false) => {
+      if (!state.customerId && !state.customerEmail) return;
+      if (forceFresh) {
+        invalidateCustomerWishlistCache(state.customerId, state.customerEmail);
+      }
+      await loadFromApi();
+    };
+
     const addLoggedIn = async () => {
-      if (!state.variantId) return;
+      if (!state.variantId) {
+        if (state.productHandle) {
+          try {
+            const productResponse = await fetch(
+              `/products/${encodeURIComponent(state.productHandle)}.js`,
+            );
+            const product = await productResponse.json();
+            const fallbackVariantId = product?.variants?.[0]?.id;
+            if (fallbackVariantId) {
+              state.variantId = String(fallbackVariantId);
+              log("card:variant lazy-resolved", {
+                productHandle: state.productHandle,
+                variantId: state.variantId,
+              });
+            }
+          } catch (err) {
+            logError("card:variant resolve failed", err);
+          }
+        }
+      }
+      if (!state.variantId) {
+        logError("add wishlist blocked: missing variantId", {
+          productId: state.productId,
+          productHandle: state.productHandle,
+          reason: reason("NO_VARIANT_ID_AFTER_LAZY_RESOLVE"),
+        });
+        return;
+      }
+      const url = `${state.apiBaseUrl}/api/wishlist/add`;
+      log("api:add start", {
+        productId: state.productId,
+        variantId: state.variantId,
+      });
       const response = await fetch(`${state.apiBaseUrl}/api/wishlist/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -195,31 +301,59 @@
         }),
       });
       const result = await response.json();
+      log("api:add", { ok: !!result.success, result });
       if (result.success) {
         setActive(true);
         state.wishlistItemId = result.wishlistItemId || null;
         if (state.wishlistItemId) {
-          updateCacheAdd(state.customerId, {
+          updateCacheAdd(state.customerId, state.customerEmail, {
             id: state.wishlistItemId,
             productId: state.productId,
             variantId: state.variantId || null,
             addedAt: new Date().toISOString(),
           });
+          window.dispatchEvent(
+            new CustomEvent("premier-wishlist-updated", {
+              detail: {
+                action: "add",
+                customerKey: state.customerKey,
+                productId: state.productId,
+                variantId: state.variantId || null,
+                wishlistItemId: state.wishlistItemId,
+              },
+            }),
+          );
         }
       }
     };
 
     const removeLoggedIn = async () => {
       if (!state.variantId) return;
+      const url = `${state.apiBaseUrl}/api/wishlist/remove`;
+      log("api:remove start", {
+        wishlistItemId: state.wishlistItemId,
+      });
       const response = await fetch(`${state.apiBaseUrl}/api/wishlist/remove`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ wishlistItemId: state.wishlistItemId }),
       });
       const result = await response.json();
+      log("api:remove", { ok: !!result.success, result });
       if (result.success) {
         setActive(false);
-        updateCacheRemove(state.customerId, state.wishlistItemId);
+        updateCacheRemove(state.customerId, state.customerEmail, state.wishlistItemId);
+        window.dispatchEvent(
+          new CustomEvent("premier-wishlist-updated", {
+            detail: {
+              action: "remove",
+              customerKey: state.customerKey,
+              productId: state.productId,
+              variantId: state.variantId || null,
+              wishlistItemId: state.wishlistItemId,
+            },
+          }),
+        );
         state.wishlistItemId = null;
       }
     };
@@ -246,12 +380,36 @@
           } else if (state.wishlistItemId) {
             await removeLoggedIn();
           }
+          log("card:click done", {
+            wishlisted: state.wishlisted,
+            wishlistItemId: state.wishlistItemId,
+          });
         } finally {
           setLoading(false);
         }
       } else {
+        log("card:guest click -> login modal");
         showLoginModal(state.loginUrl);
       }
+    });
+
+    window.addEventListener("premier-wishlist-updated", (event) => {
+      const detail = event.detail || {};
+      if (!detail || detail.customerKey !== state.customerKey) return;
+      if (normalizeId(detail.productId) !== state.productId) return;
+      if (detail.action === "add") {
+        setActive(true);
+        state.wishlistItemId = detail.wishlistItemId || state.wishlistItemId;
+      } else if (detail.action === "remove") {
+        setActive(false);
+        state.wishlistItemId = null;
+      }
+    });
+
+    buttonRegistry.push({
+      sync: syncFromServer,
+      customerKey: state.customerKey,
+      productId: state.productId,
     });
 
     if (needsInitialApiSync) {
@@ -271,16 +429,29 @@
     } catch {
       config = {};
     }
+    const urlParams = new URLSearchParams(window.location.search);
+    const customerIdFromQuery = normalizeId(urlParams.get("customerId"));
+    const customerEmailFromQuery = normalizeId(urlParams.get("email"));
+    const shopFromWindow =
+      typeof window !== "undefined" && window.Shopify?.shop
+        ? normalizeId(window.Shopify.shop)
+        : "";
 
     const state = {
-      customerId: normalizeId(config.customerId),
-      customerEmail: normalizeId(config.customerEmail),
-      shop: normalizeId(config.shop),
+      customerId: normalizeId(config.customerId) || customerIdFromQuery,
+      customerEmail:
+        normalizeId(config.customerEmail) || customerEmailFromQuery,
+      shop: normalizeId(config.shop) || shopFromWindow,
       apiBaseUrl: normalizeId(config.apiBaseUrl) || fallbackApiBaseUrl,
       loginUrl:
         normalizeId(config.loginUrl) ||
         "https://shopify.com/77283033320/account?locale=en&region_country=US",
     };
+    log("page:init", {
+      hasCustomerId: !!state.customerId,
+      hasCustomerEmail: !!state.customerEmail,
+      hasShop: !!state.shop,
+    });
 
     const listEl = container.querySelector("[data-wishlist-list]");
     const emptyEl = container.querySelector("[data-wishlist-empty]");
@@ -348,6 +519,7 @@
         removeButton?.addEventListener("click", async () => {
           setError("");
           try {
+            log("page:remove start", { wishlistItemId: item.id });
             const response = await fetch(
               `${state.apiBaseUrl}/api/wishlist/remove`,
               {
@@ -357,13 +529,29 @@
               },
             );
             const result = await response.json();
+            log("page:remove", { ok: !!result.success, result });
             if (!result.success) {
               setError(result.error || "Failed to remove item");
               return;
             }
-            updateCacheRemove(state.customerId, item.id);
+            updateCacheRemove(state.customerId, state.customerEmail, item.id);
+            window.dispatchEvent(
+              new CustomEvent("premier-wishlist-updated", {
+                detail: {
+                  action: "remove",
+                  customerKey: getCustomerCacheKey(
+                    state.customerId,
+                    state.customerEmail,
+                  ),
+                  productId: item.productId,
+                  variantId: item.variantId || null,
+                  wishlistItemId: item.id,
+                },
+              }),
+            );
             loadWishlist();
           } catch (err) {
+            logError("page:remove failed", err);
             setError(err instanceof Error ? err.message : String(err));
           }
         });
@@ -383,8 +571,19 @@
           )}&shop=${encodeURIComponent(state.shop)}`,
         );
         const result = await response.json();
-        const product = result?.data?.data?.product;
+        const product =
+          result?.data?.data?.product ||
+          result?.data?.product ||
+          result?.product ||
+          null;
+        log("api:detail-product", {
+          productId: key,
+          ok: !!product,
+          status: result?.status ?? response.status,
+          hasGraphQlErrors: Array.isArray(result?.data?.errors),
+        });
         if (!product) {
+          logError("api:detail-product parse miss", { productId: key, result });
           productCache[key] = null;
           return null;
         }
@@ -415,7 +614,8 @@
           inStock,
         };
         return productCache[key];
-      } catch {
+      } catch (err) {
+        logError("api:detail-product failed", { productId: key, err });
         productCache[key] = null;
         return null;
       }
@@ -439,6 +639,12 @@
             }
             return;
           }
+          log("page:card hydrate", {
+            productId: item.productId,
+            title: product.title,
+            hasImage: !!product.imageUrl,
+            hasHandle: !!product.handle,
+          });
           if (media) {
             if (product.imageUrl) {
               const link = document.createElement("a");
@@ -495,6 +701,7 @@
     const loadWishlist = async () => {
       setError("");
       setLoading(true);
+      log("page:load start");
       const logDebugProduct = async (productId) => {
         if (!productId) return;
         if (window.PremierWishlistDebugLogged) return;
@@ -521,19 +728,27 @@
             state.customerEmail,
           );
           renderItems(items || []);
+          log("page:load items", { count: (items || []).length });
           await hydrateProductCards(items || []);
           if (items && items.length) {
             logDebugProduct(items[0].productId);
           }
         } catch (err) {
+          logError("page:load failed", err);
           setError(err instanceof Error ? err.message : String(err));
           renderItems([]);
         } finally {
           setLoading(false);
+          log("page:load end");
         }
         return;
       }
 
+      log("page:guest mode", reason("NO_CUSTOMER_CONTEXT", {
+        hasCustomerId: !!state.customerId,
+        hasCustomerEmail: !!state.customerEmail,
+        hasShop: !!state.shop,
+      }));
       toggleGuestNotice(true);
       renderItems([]);
       setLoading(false);
@@ -543,6 +758,7 @@
   };
 
   const initAll = (root) => {
+    log("dom:scan root");
     root
       .querySelectorAll("[data-wishlist-button]")
       .forEach((button) => initButton(button));
@@ -574,5 +790,13 @@
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
+  });
+
+  window.addEventListener("pageshow", (event) => {
+    log("nav:pageshow", { persisted: !!event.persisted });
+    // On browser back/forward, bfcache can restore stale checked states.
+    buttonRegistry.forEach((entry) => {
+      entry.sync(true).catch((err) => logError("nav:sync failed", err));
+    });
   });
 })();

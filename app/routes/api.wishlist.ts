@@ -18,6 +18,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const shopifyCustomerId = url.searchParams.get("customerId");
     const customerEmail = url.searchParams.get("email");
     const shopDomain = url.searchParams.get("shop");
+    console.log("[PW][api.wishlist] incoming", {
+      hasCustomerId: !!shopifyCustomerId,
+      hasEmail: !!customerEmail,
+      shopDomain: shopDomain || null,
+    });
     let wishlistItems: WishlistItem[] = [];
 
     if (shopifyCustomerId) {
@@ -29,7 +34,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       // Find the default wishlist for the customer
       const wishlist = await prisma.wishlist.findFirst({
         where: { customerId: customer.id, isDefault: true },
-        include: { items: true },
+        include: {
+          items: {
+            where: { purchasedAt: null },
+          },
+        },
       });
       wishlistItems = (wishlist?.items ?? []).map(
         (item: {
@@ -68,7 +77,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       if (customer) {
         const wishlist = await prisma.wishlist.findFirst({
           where: { customerId: customer.id, isDefault: true },
-          include: { items: true },
+          include: {
+            items: {
+              where: { purchasedAt: null },
+            },
+          },
         });
         wishlistItems = (wishlist?.items ?? []).map((item) => ({
           id: item.id,
@@ -76,8 +89,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           variantId: item.variantId,
           addedAt: item.addedAt.toISOString(),
         }));
+      } else {
+        console.log("[PW][api.wishlist] email fallback customer not found", {
+          email: normalizedEmail,
+          shopId: shop.id,
+        });
       }
     } else {
+      console.log("[PW][api.wishlist] missing customer context");
       return corsResponse(
         { wishlist: [], example: [], error: "Missing customerId or email" },
         request,
@@ -85,8 +104,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       );
     }
 
+    console.log("[PW][api.wishlist] success", { count: wishlistItems.length });
     return corsResponse({ wishlist: wishlistItems, example: wishlistItems }, request);
   } catch (error: unknown) {
+    console.error("[PW][api.wishlist] failed", error);
     return corsResponse({ wishlist: [], example: [] }, request);
   }
 };

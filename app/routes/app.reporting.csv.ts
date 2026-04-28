@@ -15,14 +15,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     sort,
   });
 
-  const header = ["title", "sku", "inventory", "users"].join(",");
+  const header = ["title", "sku", "inventory", "users", "bought", "purchased_users", "purchased_count"].join(",");
   const lines = rows.map((row) => {
     const users = row.users.join(";");
+    const purchasedUsers = row.purchasedUsers.join(";");
     return [
       `"${row.title.replace(/"/g, '""')}"`,
       `"${(row.sku || "").replace(/"/g, '""')}"`,
       row.inventory ?? "",
       `"${users.replace(/"/g, '""')}"`,
+      row.bought ? "yes" : "no",
+      `"${purchasedUsers.replace(/"/g, '""')}"`,
+      row.purchasedCount,
     ].join(",");
   });
   const csv = [header, ...lines].join("\n");
