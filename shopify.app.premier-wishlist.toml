@@ -2,7 +2,7 @@
 
 client_id = "3d586d816dba6aae7788ccaf133feaff"
 name = "Premier-WishList"
-application_url = "https://carrying-remained-clay-vegetable.trycloudflare.com"
+application_url = "https://premier-whishlist-production.up.railway.app"
 embedded = true
 
 [webhooks]
@@ -22,5 +22,5 @@ scopes = "write_products"
 
 [auth]
 redirect_urls = [
-  "https://carrying-remained-clay-vegetable.trycloudflare.com/api/auth"
+  "https://premier-whishlist-production.up.railway.app/api/auth"
 ]
