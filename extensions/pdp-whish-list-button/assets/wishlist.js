@@ -4,7 +4,7 @@
 
   const fallbackApiBaseUrl =
     window.PremierWishlistApiBaseUrl ||
-    "https://carrying-remained-clay-vegetable.trycloudflare.com";
+    "https://premier-whishlist-production.up.railway.app";
 
   const normalizeId = (value) =>
     value === null || value === undefined ? "" : String(value);

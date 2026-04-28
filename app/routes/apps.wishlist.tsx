@@ -10,7 +10,7 @@ type WishlistRow = {
 };
 
 const FALLBACK_API_BASE_URL =
-  "https://carrying-remained-clay-vegetable.trycloudflare.com";
+  "https://premier-whishlist-production.up.railway.app";
 
 const getApiBaseUrl = () => {
   if (typeof window !== "undefined") {
