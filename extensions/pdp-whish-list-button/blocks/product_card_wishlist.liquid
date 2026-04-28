@@ -45,12 +45,32 @@
   const shopDomain = {{ shop.permanent_domain | json }};
 
   const extractProductId = (card) => {
+    const explicitProductId =
+      card.dataset?.productId ||
+      card.getAttribute("data-product-id") ||
+      card.querySelector("[data-product-id]")?.getAttribute("data-product-id");
+    if (explicitProductId) return String(explicitProductId);
+
     const link =
       card.querySelector("a[id*='__product-grid-']") ||
-      card.querySelector("a[id*='CardLink-']");
-    if (!link || !link.id) return null;
-    const match = link.id.match(/product-grid-(\d+)/);
-    return match ? match[1] : null;
+      card.querySelector("a[id*='CardLink-']") ||
+      card.querySelector("a[href*='/products/']");
+    if (!link) return null;
+
+    if (link.id) {
+      const strictMatch = link.id.match(/product-grid-(\d+)/);
+      if (strictMatch) return strictMatch[1];
+
+      // Dawn-like ids often contain the product id near the end.
+      const looseMatch = link.id.match(/(\d{8,})/g);
+      if (looseMatch?.length) return looseMatch[looseMatch.length - 1];
+    }
+
+    const href = link.getAttribute("href") || "";
+    const hrefMatch = href.match(/[?&]product_id=(\d+)/);
+    if (hrefMatch) return hrefMatch[1];
+
+    return null;
   };
 
   const extractVariantId = (card) => {
@@ -117,8 +137,14 @@
   };
 
   const attachAll = () => {
-    document.querySelectorAll(".card-wrapper.product-card-wrapper")
-      .forEach((card) => attachButton(card));
+    const selectors = [
+      ".card-wrapper.product-card-wrapper",
+      ".product-grid .grid__item",
+      ".grid__item .card-wrapper",
+      ".product-card",
+      "[data-product-id]",
+    ];
+    document.querySelectorAll(selectors.join(",")).forEach((card) => attachButton(card));
   };
 
   // Attach on initial load

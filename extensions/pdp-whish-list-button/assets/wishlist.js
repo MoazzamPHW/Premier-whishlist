@@ -57,8 +57,15 @@
     document.body.appendChild(modal);
   };
 
-  const getWishlistForCustomer = (customerId, apiBaseUrl, shopDomain) => {
-    const key = normalizeId(customerId);
+  const getWishlistForCustomer = (
+    customerId,
+    apiBaseUrl,
+    shopDomain,
+    customerEmail,
+  ) => {
+    const normalizedCustomerId = normalizeId(customerId);
+    const normalizedEmail = normalizeId(customerEmail).toLowerCase();
+    const key = normalizedCustomerId || (normalizedEmail ? `email:${normalizedEmail}` : "");
     if (!key) return Promise.resolve([]);
     if (cache.wishlistByCustomer[key]?.data) {
       return Promise.resolve(cache.wishlistByCustomer[key].data);
@@ -67,7 +74,11 @@
       return cache.wishlistByCustomer[key].promise;
     }
     const params = new URLSearchParams();
-    params.set("customerId", key);
+    if (normalizedCustomerId) {
+      params.set("customerId", normalizedCustomerId);
+    } else if (normalizedEmail) {
+      params.set("email", normalizedEmail);
+    }
     if (shopDomain) params.set("shop", shopDomain);
     const promise = fetch(`${apiBaseUrl}/api/wishlist?${params.toString()}`)
       .then((res) => res.json())
@@ -129,6 +140,8 @@
         "https://shopify.com/77283033320/account?locale=en&region_country=US",
     };
 
+    const needsInitialApiSync = !!state.customerId;
+
     const setLoading = (value) => {
       state.isLoading = value;
       button.disabled = value;
@@ -150,6 +163,7 @@
           state.customerId,
           state.apiBaseUrl,
           state.shopDomain,
+          state.customerEmail,
         );
         const found = (items || []).find(
           (item) =>
@@ -213,6 +227,9 @@
     const hydrate = () => {
       if (state.customerId) {
         loadFromApi();
+      } else {
+        // Guests do not require wishlist bootstrap API call.
+        setLoading(false);
       }
     };
 
@@ -237,6 +254,10 @@
       }
     });
 
+    if (needsInitialApiSync) {
+      // Keep disabled until initial wishlist fetch resolves.
+      setLoading(true);
+    }
     hydrate();
   };
 
@@ -253,6 +274,7 @@
 
     const state = {
       customerId: normalizeId(config.customerId),
+      customerEmail: normalizeId(config.customerEmail),
       shop: normalizeId(config.shop),
       apiBaseUrl: normalizeId(config.apiBaseUrl) || fallbackApiBaseUrl,
       loginUrl:
@@ -489,13 +511,14 @@
           console.log("wishlist detail product error", err);
         }
       };
-      if (state.customerId) {
+      if (state.customerId || state.customerEmail) {
         toggleGuestNotice(false);
         try {
           const items = await getWishlistForCustomer(
             state.customerId,
             state.apiBaseUrl,
             state.shop,
+            state.customerEmail,
           );
           renderItems(items || []);
           await hydrateProductCards(items || []);

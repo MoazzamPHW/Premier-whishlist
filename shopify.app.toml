@@ -1,6 +1,6 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "1646b3e45d0cec3a9ccb5b1c94379c95"
+client_id = "3d586d816dba6aae7788ccaf133feaff"
 name = "Premier-WishList"
 application_url = "https://premier-whishlist-production.up.railway.app"
 embedded = true

@@ -172,7 +172,7 @@
 {% endstyle %}
 
 {% capture wishlist_config %}
-  {"customerId": {{ customer.id | json }}, "shop": {{ shop.permanent_domain | json }}, "loginUrl": "https://shopify.com/77283033320/account?locale=en&region_country=US"}
+  {"customerId": {{ customer.id | json }}, "customerEmail": {{ customer.email | strip | json }}, "shop": {{ shop.permanent_domain | json }}, "loginUrl": "https://shopify.com/77283033320/account?locale=en&region_country=US"}
 {% endcapture %}
 
 <div
