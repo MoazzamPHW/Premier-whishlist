@@ -130,24 +130,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return new Response();
   }
 
-  const result = await db.wishlistItem.updateMany({
-    where: {
-      id: { in: toUpdateIds },
-      purchasedAt: null,
-    },
-    data: {
-      purchasedAt: new Date(),
-      purchasedOrderId: orderId,
-    },
-  });
+  const updates = await db.$transaction(
+    toUpdateIds.map((id) =>
+      db.wishlistItem.update({
+        where: { id },
+        data: {
+          purchasedAt: new Date(),
+          purchasedOrderId: orderId,
+          purchaseCount: { increment: 1 },
+        },
+      }),
+    ),
+  );
 
   console.log("[PW][webhook.orders.create] marked purchased", {
     orderId,
-    updatedCount: result.count,
+    updatedCount: updates.length,
     customerId: customer.id,
     matchedVariants: variantIds.length,
   });
 
   return new Response();
 };
-

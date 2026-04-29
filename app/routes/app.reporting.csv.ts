@@ -15,7 +15,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     sort,
   });
 
-  const header = ["title", "sku", "inventory", "users", "bought", "purchased_users", "purchased_count"].join(",");
+  const header = ["title", "sku", "inventory", "users", "bought", "purchased_users", "purchased_count", "purchased_times"].join(",");
   const lines = rows.map((row) => {
     const users = row.users.join(";");
     const purchasedUsers = row.purchasedUsers.join(";");
@@ -27,6 +27,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       row.bought ? "yes" : "no",
       `"${purchasedUsers.replace(/"/g, '""')}"`,
       row.purchasedCount,
+      row.purchasedTimes,
     ].join(",");
   });
   const csv = [header, ...lines].join("\n");

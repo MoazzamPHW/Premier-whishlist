@@ -15,6 +15,7 @@ export default function ReportingTable({ rows }: ReportingTableProps) {
             <th>Inventory</th>
             <th>Users</th>
             <th>Bought</th>
+            <th>Purchased times</th>
             <th>Purchased users</th>
           </tr>
         </thead>
@@ -39,6 +40,7 @@ export default function ReportingTable({ rows }: ReportingTableProps) {
                 </div>
               </td>
               <td>{row.bought ? "Yes" : "No"}</td>
+              <td>{row.purchasedTimes}</td>
               <td>
                 <div className="users">
                   {row.purchasedUsers.length
@@ -52,7 +54,7 @@ export default function ReportingTable({ rows }: ReportingTableProps) {
           ))}
           {!rows.length && (
             <tr>
-              <td colSpan={6}>No results found.</td>
+              <td colSpan={7}>No results found.</td>
             </tr>
           )}
         </tbody>

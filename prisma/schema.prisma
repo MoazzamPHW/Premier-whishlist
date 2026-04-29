@@ -93,6 +93,7 @@ model WishlistItem {
   addedAt          DateTime @default(now())
   purchasedAt      DateTime?
   purchasedOrderId String?
+  purchaseCount    Int      @default(0)
 
   wishlist         Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
 

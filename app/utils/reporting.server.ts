@@ -41,7 +41,13 @@ export async function getReportingRows({
 
   const productMap = new Map<
     string,
-    { users: Set<string>; count: number; purchasedUsers: Set<string>; purchasedCount: number }
+    {
+      users: Set<string>;
+      count: number;
+      purchasedUsers: Set<string>;
+      purchasedCount: number;
+      purchasedTimes: number;
+    }
   >();
 
   items.forEach((item) => {
@@ -51,6 +57,7 @@ export async function getReportingRows({
         count: 0,
         purchasedUsers: new Set(),
         purchasedCount: 0,
+        purchasedTimes: 0,
       };
     const email = item.wishlist.customer?.email;
     if (email && !item.purchasedAt) {
@@ -63,6 +70,7 @@ export async function getReportingRows({
       entry.purchasedCount += 1;
       if (email) entry.purchasedUsers.add(email);
     }
+    entry.purchasedTimes += Math.max(item.purchaseCount || 0, item.purchasedAt ? 1 : 0);
     productMap.set(item.productId, entry);
   });
 
@@ -129,7 +137,8 @@ export async function getReportingRows({
         count: stats.count,
         purchasedUsers: Array.from(stats.purchasedUsers),
         purchasedCount: stats.purchasedCount,
-        bought: stats.purchasedCount > 0,
+        purchasedTimes: stats.purchasedTimes,
+        bought: stats.purchasedTimes > 0,
       });
     });
   }
@@ -157,9 +166,9 @@ export async function getReportingRows({
       case "count_asc":
         return a.count - b.count;
       case "purchased_desc":
-        return b.purchasedCount - a.purchasedCount;
+        return b.purchasedTimes - a.purchasedTimes;
       case "purchased_asc":
-        return a.purchasedCount - b.purchasedCount;
+        return a.purchasedTimes - b.purchasedTimes;
       default:
         return a.title.localeCompare(b.title);
     }

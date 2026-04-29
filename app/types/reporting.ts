@@ -8,6 +8,7 @@ export type ReportingRow = {
   count: number;
   purchasedUsers: string[];
   purchasedCount: number;
+  purchasedTimes: number;
   bought: boolean;
 };
 

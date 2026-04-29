@@ -10,6 +10,9 @@
   display: flex;
   gap: 8px;
   align-items: center;
+  flex: 1 1 420px;
+  max-width: 560px;
+  min-width: 280px;
 }
 
 .reporting-actions {
