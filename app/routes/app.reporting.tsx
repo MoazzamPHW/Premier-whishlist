@@ -77,7 +77,7 @@ export default function Reporting() {
     if (query) params.set("q", query);
     params.set("sort", sort);
     params.delete("page");
-    return `/app/reporting.csv?${params.toString()}`;
+    return `/app/reporting/csv?${params.toString()}`;
   };
 
   return (
