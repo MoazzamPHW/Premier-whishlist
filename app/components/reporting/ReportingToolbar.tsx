@@ -47,7 +47,13 @@ export default function ReportingToolbar({
           <option value="purchased_desc">Purchased times (High-Low)</option>
           <option value="purchased_asc">Purchased times (Low-High)</option>
         </select>
-        <s-button  variant="secondary" href={exportHref}>
+        <s-button
+          variant="secondary"
+          type="button"
+          onClick={() => {
+            window.location.assign(exportHref);
+          }}
+        >
           Export CSV
         </s-button>
       </div>
